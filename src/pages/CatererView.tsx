@@ -264,7 +264,7 @@ const CatererView = () => {
     return (
       <Card>
         <CardBody>
-          <VStack align="stretch" spacing={4}>
+          <VStack align="stretch\" spacing={4}>
             <HStack justify="space-between">
               <Heading size="md">{request.eventType}</Heading>
               <Badge colorScheme={getStatusColor(request.status)}>
