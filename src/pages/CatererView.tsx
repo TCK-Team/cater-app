@@ -28,8 +28,21 @@ import {
   Card,
   CardBody,
   Stack,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  FormControl,
+  FormLabel,
+  Input,
+  Textarea,
+  NumberInput,
+  NumberInputField,
 } from '@chakra-ui/react';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -58,9 +71,25 @@ interface CateringRequest {
   createdAt: string;
 }
 
+interface Bid {
+  amount: number;
+  message: string;
+  proposedMenu: string;
+  estimatedDuration: string;
+}
+
 const CatererView = () => {
   const [requests, setRequests] = useState<CateringRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<CateringRequest | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [bidData, setBidData] = useState<Bid>({
+    amount: 0,
+    message: '',
+    proposedMenu: '',
+    estimatedDuration: '',
+  });
+  
   const { currentUser } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -74,7 +103,7 @@ const CatererView = () => {
     const fetchRequests = async () => {
       try {
         const requestsRef = collection(db, 'requests');
-        const q = query(requestsRef); // Removed the where clause to get all requests
+        const q = query(requestsRef);
         const querySnapshot = await getDocs(q);
         
         const fetchedRequests = querySnapshot.docs.map(doc => ({
@@ -98,6 +127,55 @@ const CatererView = () => {
 
     fetchRequests();
   }, [currentUser, navigate, toast]);
+
+  const handleBidSubmit = async () => {
+    if (!selectedRequest || !currentUser) return;
+
+    try {
+      // Create a new bid document
+      await addDoc(collection(db, 'bids'), {
+        requestId: selectedRequest.id,
+        catererId: currentUser.uid,
+        catererEmail: currentUser.email,
+        ...bidData,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+
+      // Update the request status
+      const requestRef = doc(db, 'requests', selectedRequest.id);
+      await updateDoc(requestRef, {
+        status: 'pending',
+      });
+
+      toast({
+        title: 'Bid submitted successfully',
+        status: 'success',
+        duration: 3000,
+      });
+
+      setIsModalOpen(false);
+      setBidData({
+        amount: 0,
+        message: '',
+        proposedMenu: '',
+        estimatedDuration: '',
+      });
+
+      // Refresh the requests list
+      const updatedRequests = requests.map(req =>
+        req.id === selectedRequest.id ? { ...req, status: 'pending' } : req
+      );
+      setRequests(updatedRequests);
+    } catch (error) {
+      toast({
+        title: 'Error submitting bid',
+        description: 'There was an error submitting your bid. Please try again.',
+        status: 'error',
+        duration: 5000,
+      });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -146,14 +224,14 @@ const CatererView = () => {
               <Text>{request.userEmail}</Text>
             </HStack>
 
-            <Text noOfLines={2} color="gray.600">
-              {request.description}
-            </Text>
-
             <HStack>
               <Icon as={PhoneIcon} color="blue.500" />
               <Text>Location: {request.location}</Text>
             </HStack>
+
+            <Text noOfLines={2} color="gray.600">
+              {request.description}
+            </Text>
           </Stack>
 
           <Divider />
@@ -162,14 +240,20 @@ const CatererView = () => {
             <Text fontWeight="bold" color="green.500">
               Budget: ${request.budget}
             </Text>
-            <Button
-              size="sm"
-              rightIcon={<ViewIcon />}
-              colorScheme="blue"
-              variant="solid"
-            >
-              Send Quote
-            </Button>
+            {request.status === 'open' && (
+              <Button
+                size="sm"
+                rightIcon={<ViewIcon />}
+                colorScheme="blue"
+                variant="solid"
+                onClick={() => {
+                  setSelectedRequest(request);
+                  setIsModalOpen(true);
+                }}
+              >
+                Submit Bid
+              </Button>
+            )}
           </HStack>
         </VStack>
       </CardBody>
@@ -317,6 +401,63 @@ const CatererView = () => {
           </TabPanels>
         </Tabs>
       </VStack>
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Submit Bid for {selectedRequest?.eventType}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Bid Amount ($)</FormLabel>
+                <NumberInput min={0}>
+                  <NumberInputField
+                    value={bidData.amount}
+                    onChange={(e) => setBidData({ ...bidData, amount: Number(e.target.value) })}
+                  />
+                </NumberInput>
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Proposed Menu</FormLabel>
+                <Textarea
+                  value={bidData.proposedMenu}
+                  onChange={(e) => setBidData({ ...bidData, proposedMenu: e.target.value })}
+                  placeholder="Describe your proposed menu..."
+                />
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Estimated Duration</FormLabel>
+                <Input
+                  value={bidData.estimatedDuration}
+                  onChange={(e) => setBidData({ ...bidData, estimatedDuration: e.target.value })}
+                  placeholder="e.g., 4 hours"
+                />
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Message to Customer</FormLabel>
+                <Textarea
+                  value={bidData.message}
+                  onChange={(e) => setBidData({ ...bidData, message: e.target.value })}
+                  placeholder="Include any additional information or special offers..."
+                />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={handleBidSubmit}>
+              Submit Bid
+            </Button>
+            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Container>
   );
 };
