@@ -9,6 +9,7 @@ import ViewRequests from './pages/ViewRequests';
 import CustomerView from './pages/CustomerView';
 import CatererView from './pages/CatererView';
 import Admin from './pages/Admin';
+import CatererPublicProfile from './pages/CatererPublicProfile';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -25,11 +26,10 @@ function App() {
             <Route path="/customer" element={<CustomerView />} />
             <Route path="/caterer" element={<CatererView />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/caterer/:id" element={<CatererPublicProfile />} />
           </Routes>
         </Router>
       </AuthProvider>
     </ChakraProvider>
   );
 }
-
-export default App;
