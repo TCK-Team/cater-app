@@ -12,3 +12,24 @@
   font-size: calc(10px + 2vmin);
   color: white;
 }
+
+input {
+  margin: 10px;
+  padding: 8px;
+  font-size: 16px;
+}
+
+button {
+  margin: 5px;
+  padding: 8px 16px;
+  font-size: 16px;
+  cursor: pointer;
+  background-color: #61dafb;
+  border: none;
+  border-radius: 4px;
+  color: #282c34;
+}
+
+button:hover {
+  background-color: #4fa8c7;
+}
