@@ -20,14 +20,29 @@ import {
   Stat,
   StatLabel,
   StatNumber,
+  StatHelpText,
   StatGroup,
   Avatar,
+  Progress,
+  Flex,
+  Card,
+  CardBody,
+  Stack,
 } from '@chakra-ui/react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircleIcon, TimeIcon, CalendarIcon, StarIcon, ViewIcon } from '@chakra-ui/icons';
+import {
+  CheckCircleIcon,
+  TimeIcon,
+  CalendarIcon,
+  StarIcon,
+  ViewIcon,
+  EmailIcon,
+  PhoneIcon,
+  CheckIcon,
+} from '@chakra-ui/icons';
 
 interface CateringRequest {
   id: string;
@@ -98,52 +113,62 @@ const CatererView = () => {
   };
 
   const RequestCard = ({ request }: { request: CateringRequest }) => (
-    <Box
-      p={6}
-      borderWidth="1px"
-      borderRadius="lg"
-      boxShadow="sm"
-      bg="white"
-      transition="all 0.2s"
-      _hover={{ transform: 'translateY(-2px)', boxShadow: 'md' }}
-    >
-      <VStack align="stretch" spacing={4}>
-        <HStack justify="space-between">
-          <Heading size="md">{request.eventType}</Heading>
-          <Badge colorScheme={getStatusColor(request.status)}>
-            {request.status.toUpperCase()}
-          </Badge>
-        </HStack>
+    <Card>
+      <CardBody>
+        <VStack align="stretch" spacing={4}>
+          <HStack justify="space-between">
+            <Heading size="md">{request.eventType}</Heading>
+            <Badge colorScheme={getStatusColor(request.status)}>
+              {request.status.toUpperCase()}
+            </Badge>
+          </HStack>
 
-        <HStack spacing={4}>
-          <Icon as={CalendarIcon} color="gray.500" />
-          <Text>{new Date(request.date).toLocaleDateString()}</Text>
-        </HStack>
-
-        <HStack spacing={4}>
-          <Icon as={TimeIcon} color="gray.500" />
-          <Text>{request.guestCount} guests</Text>
-        </HStack>
-
-        <Text noOfLines={2}>{request.description}</Text>
-
-        <Divider />
-
-        <HStack justify="space-between" align="center">
-          <Text fontWeight="bold" color="green.500">
-            ${request.budget}
-          </Text>
-          <Button
+          <Progress
+            value={request.status === 'completed' ? 100 : request.status === 'pending' ? 50 : 25}
             size="sm"
-            rightIcon={<ViewIcon />}
-            colorScheme="blue"
-            variant="outline"
-          >
-            View Details
-          </Button>
-        </HStack>
-      </VStack>
-    </Box>
+            colorScheme={getStatusColor(request.status)}
+            borderRadius="full"
+          />
+
+          <Stack spacing={3}>
+            <HStack>
+              <Icon as={CalendarIcon} color="blue.500" />
+              <Text>{new Date(request.date).toLocaleDateString()}</Text>
+            </HStack>
+
+            <HStack>
+              <Icon as={TimeIcon} color="blue.500" />
+              <Text>{request.guestCount} guests</Text>
+            </HStack>
+
+            <HStack>
+              <Icon as={EmailIcon} color="blue.500" />
+              <Text>{request.userEmail}</Text>
+            </HStack>
+
+            <Text noOfLines={2} color="gray.600">
+              {request.description}
+            </Text>
+          </Stack>
+
+          <Divider />
+
+          <HStack justify="space-between" align="center">
+            <Text fontWeight="bold" color="green.500">
+              Budget: ${request.budget}
+            </Text>
+            <Button
+              size="sm"
+              rightIcon={<ViewIcon />}
+              colorScheme="blue"
+              variant="solid"
+            >
+              Send Quote
+            </Button>
+          </HStack>
+        </VStack>
+      </CardBody>
+    </Card>
   );
 
   if (loading) {
@@ -158,42 +183,96 @@ const CatererView = () => {
   const activeRequests = requests.filter(r => r.status === 'pending');
   const completedRequests = requests.filter(r => r.status === 'completed');
 
+  const responseRate = 95; // Simulated response rate
+  const completionRate = 98; // Simulated completion rate
+
   return (
     <Container maxW="container.xl" py={8}>
       <VStack spacing={8} align="stretch">
-        <Box bg="white" p={6} borderRadius="lg" boxShadow="sm">
-          <HStack spacing={6}>
-            <Avatar size="xl" name={currentUser?.email || 'Caterer'} />
-            <VStack align="start" spacing={2}>
-              <Heading size="lg">{currentUser?.email}</Heading>
-              <HStack>
-                <Icon as={StarIcon} color="yellow.400" />
-                <Text>4.8 (124 reviews)</Text>
-              </HStack>
-              <Badge colorScheme="green">Verified Caterer</Badge>
-            </VStack>
-          </HStack>
-        </Box>
+        <Card>
+          <CardBody>
+            <HStack spacing={6}>
+              <Avatar 
+                size="xl" 
+                name={currentUser?.email || 'Caterer'} 
+                src="https://images.pexels.com/photos/3814446/pexels-photo-3814446.jpeg"
+              />
+              <VStack align="start" spacing={2} flex={1}>
+                <Heading size="lg">{currentUser?.email}</Heading>
+                <HStack>
+                  <Icon as={StarIcon} color="yellow.400" />
+                  <Text fontWeight="bold">4.8</Text>
+                  <Text color="gray.500">(124 reviews)</Text>
+                </HStack>
+                <HStack spacing={4}>
+                  <Badge colorScheme="green">Verified Caterer</Badge>
+                  <Badge colorScheme="purple">Premium Member</Badge>
+                  <Badge colorScheme="blue">Top Rated</Badge>
+                </HStack>
+              </VStack>
+              <Button leftIcon={<CheckIcon />} colorScheme="green" variant="outline">
+                Update Profile
+              </Button>
+            </HStack>
+          </CardBody>
+        </Card>
 
-        <StatGroup bg="white" p={6} borderRadius="lg" boxShadow="sm">
-          <Stat>
-            <StatLabel>New Requests</StatLabel>
-            <StatNumber>{newRequests.length}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>Active Jobs</StatLabel>
-            <StatNumber>{activeRequests.length}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>Completed</StatLabel>
-            <StatNumber>{completedRequests.length}</StatNumber>
-          </Stat>
-        </StatGroup>
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
+          <Card>
+            <CardBody>
+              <Stat>
+                <StatLabel>Response Rate</StatLabel>
+                <StatNumber>{responseRate}%</StatNumber>
+                <StatHelpText>
+                  <Icon as={CheckCircleIcon} color="green.500" mr={1} />
+                  Above Average
+                </StatHelpText>
+              </Stat>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <Stat>
+                <StatLabel>Completion Rate</StatLabel>
+                <StatNumber>{completionRate}%</StatNumber>
+                <StatHelpText>
+                  <Icon as={CheckCircleIcon} color="green.500" mr={1} />
+                  Excellent
+                </StatHelpText>
+              </Stat>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <Stat>
+                <StatLabel>Active Jobs</StatLabel>
+                <StatNumber>{activeRequests.length}</StatNumber>
+                <StatHelpText>
+                  Current Projects
+                </StatHelpText>
+              </Stat>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <Stat>
+                <StatLabel>Total Completed</StatLabel>
+                <StatNumber>{completedRequests.length}</StatNumber>
+                <StatHelpText>
+                  Lifetime Jobs
+                </StatHelpText>
+              </Stat>
+            </CardBody>
+          </Card>
+        </SimpleGrid>
 
         <Tabs variant="enclosed" colorScheme="blue">
           <TabList>
-            <Tab>New Requests ({newRequests.length})</Tab>
-            <Tab>Active ({activeRequests.length})</Tab>
+            <Tab>New Leads ({newRequests.length})</Tab>
+            <Tab>Active Jobs ({activeRequests.length})</Tab>
             <Tab>Completed ({completedRequests.length})</Tab>
           </TabList>
 
@@ -205,7 +284,7 @@ const CatererView = () => {
                 ))}
               </SimpleGrid>
               {newRequests.length === 0 && (
-                <Text textAlign="center">No new requests available.</Text>
+                <Text textAlign="center">No new leads available at the moment.</Text>
               )}
             </TabPanel>
 
@@ -216,7 +295,7 @@ const CatererView = () => {
                 ))}
               </SimpleGrid>
               {activeRequests.length === 0 && (
-                <Text textAlign="center">No active requests.</Text>
+                <Text textAlign="center">No active jobs at the moment.</Text>
               )}
             </TabPanel>
 
@@ -227,7 +306,7 @@ const CatererView = () => {
                 ))}
               </SimpleGrid>
               {completedRequests.length === 0 && (
-                <Text textAlign="center">No completed requests yet.</Text>
+                <Text textAlign="center">No completed jobs yet.</Text>
               )}
             </TabPanel>
           </TabPanels>
