@@ -74,7 +74,7 @@ const CatererView = () => {
     const fetchRequests = async () => {
       try {
         const requestsRef = collection(db, 'requests');
-        const q = query(requestsRef);
+        const q = query(requestsRef); // Removed the where clause to get all requests
         const querySnapshot = await getDocs(q);
         
         const fetchedRequests = querySnapshot.docs.map(doc => ({
@@ -149,6 +149,11 @@ const CatererView = () => {
             <Text noOfLines={2} color="gray.600">
               {request.description}
             </Text>
+
+            <HStack>
+              <Icon as={PhoneIcon} color="blue.500" />
+              <Text>Location: {request.location}</Text>
+            </HStack>
           </Stack>
 
           <Divider />
@@ -183,8 +188,8 @@ const CatererView = () => {
   const activeRequests = requests.filter(r => r.status === 'pending');
   const completedRequests = requests.filter(r => r.status === 'completed');
 
-  const responseRate = 95; // Simulated response rate
-  const completionRate = 98; // Simulated completion rate
+  const responseRate = 95;
+  const completionRate = 98;
 
   return (
     <Container maxW="container.xl" py={8}>
