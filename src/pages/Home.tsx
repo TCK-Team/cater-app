@@ -1,0 +1,79 @@
+import React, { useState } from 'react';
+import {
+  Box,
+  Button,
+  FormControl,
+  FormLabel,
+  Input,
+  VStack,
+  Heading,
+  useToast,
+} from '@chakra-ui/react';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase';
+import { useNavigate } from 'react-router-dom';
+
+const Home = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const toast = useToast();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isSignUp) {
+        await createUserWithEmailAndPassword(auth, email, password);
+        toast({ title: 'Account created successfully!', status: 'success' });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+        toast({ title: 'Signed in successfully!', status: 'success' });
+      }
+      navigate('/view-requests');
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, status: 'error' });
+    }
+  };
+
+  return (
+    <Box p={8}>
+      <VStack spacing={8} maxW="md" mx="auto">
+        <Heading>{isSignUp ? 'Create Account' : 'Sign In'}</Heading>
+        <form onSubmit={handleSubmit} style={{ width: '100%' }}>
+          <VStack spacing={4}>
+            <FormControl>
+              <FormLabel>Email</FormLabel>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>Password</FormLabel>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </FormControl>
+            <Button type="submit" colorScheme="blue" width="100%">
+              {isSignUp ? 'Sign Up' : 'Sign In'}
+            </Button>
+            <Button
+              variant="link"
+              onClick={() => setIsSignUp(!isSignUp)}
+            >
+              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            </Button>
+          </VStack>
+        </form>
+      </VStack>
+    </Box>
+  );
+};
+
+export default Home;
