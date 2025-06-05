@@ -88,7 +88,7 @@ const CatererPublicProfile = () => {
 
   if (loading) {
     return (
-      <Box height="100vh" display="flex" alignItems="center" justifyContent="center">
+      <Box height="100vh\" display="flex\" alignItems="center\" justifyContent="center">
         <Spinner size="xl" />
       </Box>
     );
@@ -157,7 +157,7 @@ const CatererPublicProfile = () => {
           <StatGroup bg="white" p={6} borderRadius="lg" shadow="md">
             <Stat>
               <StatLabel>Response Time</StatLabel>
-              <StatNumber>< 2 hrs</StatNumber>
+              <StatNumber>{'< 2 hrs'}</StatNumber>
             </Stat>
           </StatGroup>
         </SimpleGrid>
