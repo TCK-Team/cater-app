@@ -36,7 +36,7 @@ const Navbar = () => {
             <Link to="/caterer">Dashboard</Link>
           ) : (
             <>
-              <Link to="/client">My Requests</Link>
+              <Link to="/customer">My Requests</Link>
               <Link to="/create-request">Create Request</Link>
             </>
           )}
@@ -55,5 +55,3 @@ const Navbar = () => {
     </Box>
   );
 };
-
-export default Navbar;
