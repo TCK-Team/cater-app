@@ -8,14 +8,17 @@ import {
   VStack,
   Heading,
   useToast,
+  Select,
 } from '@chakra-ui/react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
+import { doc, setDoc } from 'firebase/firestore';
 
 const Home = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [userType, setUserType] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
@@ -24,7 +27,17 @@ const Home = () => {
     e.preventDefault();
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        if (!userType) {
+          toast({ title: 'Error', description: 'Please select a user type', status: 'error' });
+          return;
+        }
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Create user profile in Firestore
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          email: email,
+          userType: userType,
+          createdAt: new Date(),
+        });
         toast({ title: 'Account created successfully!', status: 'success' });
       } else {
         await signInWithEmailAndPassword(auth, email, password);
@@ -60,6 +73,20 @@ const Home = () => {
                 required
               />
             </FormControl>
+            {isSignUp && (
+              <FormControl>
+                <FormLabel>I am a</FormLabel>
+                <Select
+                  placeholder="Select user type"
+                  value={userType}
+                  onChange={(e) => setUserType(e.target.value)}
+                  required
+                >
+                  <option value="customer">Customer</option>
+                  <option value="caterer">Caterer</option>
+                </Select>
+              </FormControl>
+            )}
             <Button type="submit" colorScheme="blue" width="100%">
               {isSignUp ? 'Sign Up' : 'Sign In'}
             </Button>
