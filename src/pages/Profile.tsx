@@ -24,11 +24,13 @@ import {
   IconButton,
   HStack,
   Divider,
+  Spinner,
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useNavigate } from 'react-router-dom';
 
 interface MenuItem {
   name: string;
@@ -52,6 +54,7 @@ interface CatererProfile {
 const Profile = () => {
   const { currentUser } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<CatererProfile>({
     businessName: '',
@@ -76,16 +79,27 @@ const Profile = () => {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        navigate('/');
+        return;
+      }
 
       try {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (!userDoc.exists() || userDoc.data().userType !== 'caterer') {
+          navigate('/');
+          return;
+        }
+
         const profileDoc = await getDoc(doc(db, 'catererProfiles', currentUser.uid));
         if (profileDoc.exists()) {
-          setProfile(profileDoc.data() as CatererProfile);
+          const profileData = profileDoc.data() as CatererProfile;
+          setProfile(profileData);
         }
       } catch (error) {
         toast({
           title: 'Error fetching profile',
+          description: 'Failed to load your profile data.',
           status: 'error',
           duration: 3000,
         });
@@ -95,7 +109,7 @@ const Profile = () => {
     };
 
     fetchProfile();
-  }, [currentUser, toast]);
+  }, [currentUser, navigate, toast]);
 
   const handleUpdateProfile = async () => {
     if (!currentUser) return;
@@ -103,13 +117,15 @@ const Profile = () => {
     try {
       await setDoc(doc(db, 'catererProfiles', currentUser.uid), profile);
       toast({
-        title: 'Profile updated successfully',
+        title: 'Success',
+        description: 'Your profile has been updated successfully.',
         status: 'success',
         duration: 3000,
       });
     } catch (error) {
       toast({
-        title: 'Error updating profile',
+        title: 'Error',
+        description: 'Failed to update your profile. Please try again.',
         status: 'error',
         duration: 3000,
       });
@@ -164,7 +180,11 @@ const Profile = () => {
   };
 
   if (isLoading) {
-    return <Box p={8}>Loading...</Box>;
+    return (
+      <Box height="100vh" display="flex" alignItems="center" justifyContent="center">
+        <Spinner size="xl" />
+      </Box>
+    );
   }
 
   return (
