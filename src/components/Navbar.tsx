@@ -22,9 +22,17 @@ const Navbar = () => {
       <Flex h={16} alignItems="center" justifyContent="space-between">
         <Flex gap={4}>
           <Link to="/">Home</Link>
-          <Link to="/view-requests">Browse Requests</Link>
-          {currentUser && <Link to="/create-request">Create Request</Link>}
-          {currentUser?.email === 'natalya@thecitykitch.com' && <Link to="/admin">Admin</Link>}
+          {currentUser?.email === 'natalya@thecitykitch.com' ? (
+            <>
+              <Link to="/view-requests">Browse Requests</Link>
+              <Link to="/admin">Admin</Link>
+            </>
+          ) : (
+            <>
+              <Link to="/client">My Requests</Link>
+              <Link to="/create-request">Create Request</Link>
+            </>
+          )}
         </Flex>
         <Flex gap={4}>
           {currentUser ? (
