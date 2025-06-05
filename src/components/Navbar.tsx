@@ -25,15 +25,7 @@ const Navbar = () => {
 
   // Hide navigation on the home page (sign in/sign up)
   if (location.pathname === '/') {
-    return (
-      <Box bg={bg} px={4} shadow="md">
-        <Flex h={16} alignItems="center" justifyContent="flex-end">
-          {currentUser && (
-            <Button onClick={handleSignOut}>Sign Out</Button>
-          )}
-        </Flex>
-      </Box>
-    );
+    return null;
   }
 
   return (
