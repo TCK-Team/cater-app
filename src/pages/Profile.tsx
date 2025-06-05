@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   VStack,
@@ -25,12 +25,15 @@ import {
   HStack,
   Divider,
   Spinner,
+  Progress,
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useNavigate } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 
 interface MenuItem {
   name: string;
@@ -55,7 +58,10 @@ const Profile = () => {
   const { currentUser } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [profile, setProfile] = useState<CatererProfile>({
     businessName: '',
     phone: '',
@@ -75,7 +81,6 @@ const Profile = () => {
   });
   const [newSpecialty, setNewSpecialty] = useState('');
   const [newArea, setNewArea] = useState('');
-  const [newImage, setNewImage] = useState('');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -132,6 +137,86 @@ const Profile = () => {
     }
   };
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || !currentUser) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const imageId = uuidv4();
+        const storageRef = ref(storage, `caterer-images/${currentUser.uid}/${imageId}`);
+        
+        await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        setUploadProgress(prev => prev + (100 / files.length));
+        return downloadURL;
+      });
+
+      const uploadedUrls = await Promise.all(uploadPromises);
+      
+      setProfile(prev => ({
+        ...prev,
+        images: [...prev.images, ...uploadedUrls],
+      }));
+
+      toast({
+        title: 'Success',
+        description: 'Images uploaded successfully',
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to upload images. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDeleteImage = async (imageUrl: string) => {
+    if (!currentUser) return;
+
+    try {
+      // Extract the path from the URL
+      const imagePath = imageUrl.split('/o/')[1].split('?')[0];
+      const decodedPath = decodeURIComponent(imagePath);
+      const imageRef = ref(storage, decodedPath);
+
+      await deleteObject(imageRef);
+      
+      setProfile(prev => ({
+        ...prev,
+        images: prev.images.filter(img => img !== imageUrl),
+      }));
+
+      toast({
+        title: 'Success',
+        description: 'Image deleted successfully',
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete image. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
   const handleAddMenuItem = () => {
     if (newMenuItem.name && newMenuItem.price) {
       setProfile(prev => ({
@@ -169,19 +254,9 @@ const Profile = () => {
     }
   };
 
-  const handleAddImage = () => {
-    if (newImage) {
-      setProfile(prev => ({
-        ...prev,
-        images: [...prev.images, newImage],
-      }));
-      setNewImage('');
-    }
-  };
-
   if (isLoading) {
     return (
-      <Box height="100vh\" display="flex\" alignItems="center\" justifyContent="center">
+      <Box height="100vh" display="flex" alignItems="center" justifyContent="center">
         <Spinner size="xl" />
       </Box>
     );
@@ -241,17 +316,32 @@ const Profile = () => {
             <TabPanel>
               <VStack spacing={6}>
                 <FormControl>
-                  <FormLabel>Add Portfolio Image (URL)</FormLabel>
-                  <HStack>
-                    <Input
-                      value={newImage}
-                      onChange={(e) => setNewImage(e.target.value)}
-                      placeholder="Enter image URL"
+                  <FormLabel>Upload Portfolio Images</FormLabel>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                  />
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    leftIcon={<AddIcon />}
+                    isLoading={isUploading}
+                    width="full"
+                  >
+                    Select Images
+                  </Button>
+                  {isUploading && (
+                    <Progress
+                      value={uploadProgress}
+                      size="sm"
+                      colorScheme="blue"
+                      width="100%"
+                      mt={2}
                     />
-                    <Button onClick={handleAddImage} leftIcon={<AddIcon />}>
-                      Add
-                    </Button>
-                  </HStack>
+                  )}
                 </FormControl>
 
                 <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
@@ -271,12 +361,7 @@ const Profile = () => {
                         position="absolute"
                         top={2}
                         right={2}
-                        onClick={() => {
-                          setProfile(prev => ({
-                            ...prev,
-                            images: prev.images.filter((_, i) => i !== index),
-                          }));
-                        }}
+                        onClick={() => handleDeleteImage(image)}
                       />
                     </Box>
                   ))}
