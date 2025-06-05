@@ -24,6 +24,7 @@ const Navbar = () => {
           <Link to="/">Home</Link>
           <Link to="/view-requests">Browse Requests</Link>
           {currentUser && <Link to="/create-request">Create Request</Link>}
+          {currentUser?.email === 'admin@example.com' && <Link to="/admin">Admin</Link>}
         </Flex>
         <Flex gap={4}>
           {currentUser ? (
