@@ -17,16 +17,23 @@ const Navbar = () => {
     }
   };
 
+  const getUserType = () => {
+    if (currentUser?.email === 'natalya@thecitykitch.com') return 'admin';
+    return localStorage.getItem('userType') || 'customer';
+  };
+
   return (
     <Box bg={bg} px={4} shadow="md">
       <Flex h={16} alignItems="center" justifyContent="space-between">
         <Flex gap={4}>
           <Link to="/">Home</Link>
-          {currentUser?.email === 'natalya@thecitykitch.com' ? (
+          {getUserType() === 'admin' ? (
             <>
               <Link to="/view-requests">Browse Requests</Link>
               <Link to="/admin">Admin</Link>
             </>
+          ) : getUserType() === 'caterer' ? (
+            <Link to="/caterer">Dashboard</Link>
           ) : (
             <>
               <Link to="/client">My Requests</Link>

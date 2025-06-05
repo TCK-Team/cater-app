@@ -7,6 +7,7 @@ import Profile from './pages/Profile';
 import CreateRequest from './pages/CreateRequest';
 import ViewRequests from './pages/ViewRequests';
 import ClientView from './pages/ClientView';
+import CatererView from './pages/CatererView';
 import Admin from './pages/Admin';
 import { AuthProvider } from './contexts/AuthContext';
 
@@ -22,6 +23,7 @@ function App() {
             <Route path="/create-request" element={<CreateRequest />} />
             <Route path="/view-requests" element={<ViewRequests />} />
             <Route path="/client" element={<ClientView />} />
+            <Route path="/caterer" element={<CatererView />} />
             <Route path="/admin" element={<Admin />} />
           </Routes>
         </Router>
@@ -30,4 +32,4 @@ function App() {
   );
 }
 
-export default App
+export default App;
