@@ -35,8 +35,12 @@ import {
   ModalFooter,
   ModalBody,
   ModalCloseButton,
+  Input,
+  Textarea,
+  FormControl,
+  FormLabel,
 } from '@chakra-ui/react';
-import { collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, getDocs, updateDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -49,7 +53,9 @@ import {
   EmailIcon,
   PhoneIcon,
   CheckIcon,
+  ChatIcon,
 } from '@chakra-ui/icons';
+import { formatDistanceToNow } from 'date-fns';
 
 interface CateringRequest {
   id: string;
@@ -65,11 +71,36 @@ interface CateringRequest {
   createdAt: string;
 }
 
+interface Bid {
+  id: string;
+  requestId: string;
+  catererId: string;
+  amount: number;
+  message: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: Date;
+}
+
+interface Message {
+  id: string;
+  requestId: string;
+  senderId: string;
+  senderEmail: string;
+  content: string;
+  createdAt: Date;
+}
+
 const CatererView = () => {
   const [requests, setRequests] = useState<CateringRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<CateringRequest | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBidModalOpen, setIsBidModalOpen] = useState(false);
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+  const [bidAmount, setBidAmount] = useState('');
+  const [bidMessage, setBidMessage] = useState('');
+  const [chatMessage, setChatMessage] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [bids, setBids] = useState<Bid[]>([]);
   
   const { currentUser } = useAuth();
   const toast = useToast();
@@ -81,8 +112,9 @@ const CatererView = () => {
       return;
     }
 
-    const fetchRequests = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch open requests
         const requestsRef = collection(db, 'requests');
         const q = query(requestsRef);
         const querySnapshot = await getDocs(q);
@@ -93,10 +125,20 @@ const CatererView = () => {
         })) as CateringRequest[];
 
         setRequests(fetchedRequests);
+
+        // Fetch bids
+        const bidsRef = collection(db, 'bids');
+        const bidsSnapshot = await getDocs(bidsRef);
+        const fetchedBids = bidsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Bid[];
+        setBids(fetchedBids);
+
       } catch (error) {
         toast({
-          title: 'Error fetching requests',
-          description: 'There was an error loading the catering requests.',
+          title: 'Error fetching data',
+          description: 'There was an error loading the requests.',
           status: 'error',
           duration: 5000,
           isClosable: true,
@@ -106,41 +148,99 @@ const CatererView = () => {
       }
     };
 
-    fetchRequests();
+    fetchData();
   }, [currentUser, navigate, toast]);
 
-  const handleBookJob = async () => {
+  const handleSubmitBid = async () => {
     if (!selectedRequest || !currentUser) return;
 
     try {
-      const requestRef = doc(db, 'requests', selectedRequest.id);
-      await updateDoc(requestRef, {
-        status: 'booked',
+      const newBid = {
+        requestId: selectedRequest.id,
         catererId: currentUser.uid,
-        catererEmail: currentUser.email,
-        bookedAt: new Date().toISOString(),
-      });
+        amount: parseFloat(bidAmount),
+        message: bidMessage,
+        status: 'pending',
+        createdAt: new Date(),
+      };
+
+      await addDoc(collection(db, 'bids'), newBid);
 
       toast({
-        title: 'Job booked successfully',
-        description: 'You can now contact the customer to discuss details.',
+        title: 'Bid submitted successfully',
         status: 'success',
         duration: 3000,
       });
 
-      setIsModalOpen(false);
+      setIsBidModalOpen(false);
+      setBidAmount('');
+      setBidMessage('');
 
-      // Update the local state
-      const updatedRequests = requests.map(req =>
-        req.id === selectedRequest.id ? { ...req, status: 'booked' } : req
-      );
-      setRequests(updatedRequests);
+      // Update local state
+      setBids([...bids, { ...newBid, id: Date.now().toString() }]);
     } catch (error) {
       toast({
-        title: 'Error booking job',
-        description: 'There was an error booking this job. Please try again.',
+        title: 'Error submitting bid',
+        description: 'There was an error submitting your bid. Please try again.',
         status: 'error',
         duration: 5000,
+      });
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!selectedRequest || !currentUser || !chatMessage.trim()) return;
+
+    try {
+      const newMessage = {
+        requestId: selectedRequest.id,
+        senderId: currentUser.uid,
+        senderEmail: currentUser.email,
+        content: chatMessage,
+        createdAt: new Date(),
+      };
+
+      await addDoc(collection(db, 'messages'), newMessage);
+
+      // Update local state
+      setMessages([...messages, { ...newMessage, id: Date.now().toString() }]);
+      setChatMessage('');
+
+      toast({
+        title: 'Message sent',
+        status: 'success',
+        duration: 2000,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error sending message',
+        description: 'Failed to send message. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const fetchMessages = async (requestId: string) => {
+    try {
+      const messagesRef = collection(db, 'messages');
+      const q = query(messagesRef);
+      const querySnapshot = await getDocs(q);
+      
+      const fetchedMessages = querySnapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .filter(msg => msg.requestId === requestId) as Message[];
+
+      setMessages(fetchedMessages);
+    } catch (error) {
+      toast({
+        title: 'Error fetching messages',
+        description: 'Failed to load chat messages.',
+        status: 'error',
+        duration: 3000,
       });
     }
   };
@@ -158,75 +258,98 @@ const CatererView = () => {
     }
   };
 
-  const RequestCard = ({ request }: { request: CateringRequest }) => (
-    <Card>
-      <CardBody>
-        <VStack align="stretch" spacing={4}>
-          <HStack justify="space-between">
-            <Heading size="md">{request.eventType}</Heading>
-            <Badge colorScheme={getStatusColor(request.status)}>
-              {request.status.toUpperCase()}
-            </Badge>
-          </HStack>
-
-          <Progress
-            value={request.status === 'completed' ? 100 : request.status === 'booked' ? 50 : 25}
-            size="sm"
-            colorScheme={getStatusColor(request.status)}
-            borderRadius="full"
-          />
-
-          <Stack spacing={3}>
-            <HStack>
-              <Icon as={CalendarIcon} color="blue.500" />
-              <Text>{new Date(request.date).toLocaleDateString()}</Text>
+  const RequestCard = ({ request }: { request: CateringRequest }) => {
+    const requestBids = bids.filter(bid => bid.requestId === request.id);
+    
+    return (
+      <Card>
+        <CardBody>
+          <VStack align="stretch" spacing={4}>
+            <HStack justify="space-between">
+              <Heading size="md">{request.eventType}</Heading>
+              <Badge colorScheme={getStatusColor(request.status)}>
+                {request.status.toUpperCase()}
+              </Badge>
             </HStack>
 
-            <HStack>
-              <Icon as={TimeIcon} color="blue.500" />
-              <Text>{request.guestCount} guests</Text>
+            <Stack spacing={3}>
+              <HStack>
+                <Icon as={CalendarIcon} color="blue.500" />
+                <Text>{new Date(request.date).toLocaleDateString()}</Text>
+              </HStack>
+
+              <HStack>
+                <Icon as={TimeIcon} color="blue.500" />
+                <Text>{request.guestCount} guests</Text>
+              </HStack>
+
+              <HStack>
+                <Icon as={PhoneIcon} color="blue.500" />
+                <Text>Location: {request.location}</Text>
+              </HStack>
+
+              <Text noOfLines={2} color="gray.600">
+                {request.description}
+              </Text>
+            </Stack>
+
+            <Divider />
+
+            <HStack justify="space-between" align="center">
+              <Text fontWeight="bold" color="green.500">
+                Budget: ${request.budget}
+              </Text>
+              <HStack>
+                <Button
+                  size="sm"
+                  leftIcon={<ChatIcon />}
+                  colorScheme="blue"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedRequest(request);
+                    fetchMessages(request.id);
+                    setIsChatModalOpen(true);
+                  }}
+                >
+                  Chat
+                </Button>
+                {request.status === 'open' && (
+                  <Button
+                    size="sm"
+                    leftIcon={<ViewIcon />}
+                    colorScheme="green"
+                    onClick={() => {
+                      setSelectedRequest(request);
+                      setIsBidModalOpen(true);
+                    }}
+                  >
+                    Place Bid
+                  </Button>
+                )}
+              </HStack>
             </HStack>
 
-            <HStack>
-              <Icon as={PhoneIcon} color="blue.500" />
-              <Text>Location: {request.location}</Text>
-            </HStack>
-
-            <HStack>
-              <Icon as={EmailIcon} color="blue.500" />
-              <Text>{request.userEmail}</Text>
-            </HStack>
-
-            <Text noOfLines={2} color="gray.600">
-              {request.description}
-            </Text>
-          </Stack>
-
-          <Divider />
-
-          <HStack justify="space-between" align="center">
-            <Text fontWeight="bold" color="green.500">
-              Budget: ${request.budget}
-            </Text>
-            {request.status === 'open' && (
-              <Button
-                size="sm"
-                rightIcon={<ViewIcon />}
-                colorScheme="blue"
-                variant="solid"
-                onClick={() => {
-                  setSelectedRequest(request);
-                  setIsModalOpen(true);
-                }}
-              >
-                Book Job
-              </Button>
+            {requestBids.length > 0 && (
+              <Box>
+                <Text fontWeight="bold" mb={2}>Your Bids:</Text>
+                {requestBids.map(bid => (
+                  <HStack key={bid.id} p={2} bg="gray.50" borderRadius="md">
+                    <Badge colorScheme={bid.status === 'accepted' ? 'green' : 'yellow'}>
+                      ${bid.amount}
+                    </Badge>
+                    <Text fontSize="sm">{bid.message}</Text>
+                    <Text fontSize="xs" color="gray.500">
+                      {formatDistanceToNow(bid.createdAt, { addSuffix: true })}
+                    </Text>
+                  </HStack>
+                ))}
+              </Box>
             )}
-          </HStack>
-        </VStack>
-      </CardBody>
-    </Card>
-  );
+          </VStack>
+        </CardBody>
+      </Card>
+    );
+  };
 
   if (loading) {
     return (
@@ -236,171 +359,138 @@ const CatererView = () => {
     );
   }
 
-  const availableJobs = requests.filter(r => r.status === 'open');
-  const bookedJobs = requests.filter(r => r.status === 'booked');
-  const completedJobs = requests.filter(r => r.status === 'completed');
-
-  const responseRate = 95;
-  const completionRate = 98;
+  const openRequests = requests.filter(r => r.status === 'open');
+  const biddedRequests = requests.filter(r => bids.some(b => b.requestId === r.id && b.catererId === currentUser?.uid));
+  const bookedRequests = requests.filter(r => r.status === 'booked');
 
   return (
     <Container maxW="container.xl" py={8}>
       <VStack spacing={8} align="stretch">
-        <Card>
-          <CardBody>
-            <HStack spacing={6}>
-              <Avatar 
-                size="xl" 
-                name={currentUser?.email || 'Caterer'} 
-                src="https://images.pexels.com/photos/3814446/pexels-photo-3814446.jpeg"
-              />
-              <VStack align="start" spacing={2} flex={1}>
-                <Heading size="lg">{currentUser?.email}</Heading>
-                <HStack>
-                  <Icon as={StarIcon} color="yellow.400" />
-                  <Text fontWeight="bold">4.8</Text>
-                  <Text color="gray.500">(124 reviews)</Text>
-                </HStack>
-                <HStack spacing={4}>
-                  <Badge colorScheme="green">Verified Caterer</Badge>
-                  <Badge colorScheme="purple">Premium Member</Badge>
-                  <Badge colorScheme="blue">Top Rated</Badge>
-                </HStack>
-              </VStack>
-              <Button leftIcon={<CheckIcon />} colorScheme="green" variant="outline">
-                Update Profile
-              </Button>
-            </HStack>
-          </CardBody>
-        </Card>
-
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
-          <Card>
-            <CardBody>
-              <Stat>
-                <StatLabel>Response Rate</StatLabel>
-                <StatNumber>{responseRate}%</StatNumber>
-                <StatHelpText>
-                  <Icon as={CheckCircleIcon} color="green.500" mr={1} />
-                  Above Average
-                </StatHelpText>
-              </Stat>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody>
-              <Stat>
-                <StatLabel>Completion Rate</StatLabel>
-                <StatNumber>{completionRate}%</StatNumber>
-                <StatHelpText>
-                  <Icon as={CheckCircleIcon} color="green.500" mr={1} />
-                  Excellent
-                </StatHelpText>
-              </Stat>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody>
-              <Stat>
-                <StatLabel>Active Jobs</StatLabel>
-                <StatNumber>{bookedJobs.length}</StatNumber>
-                <StatHelpText>
-                  Current Projects
-                </StatHelpText>
-              </Stat>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody>
-              <Stat>
-                <StatLabel>Total Completed</StatLabel>
-                <StatNumber>{completedJobs.length}</StatNumber>
-                <StatHelpText>
-                  Lifetime Jobs
-                </StatHelpText>
-              </Stat>
-            </CardBody>
-          </Card>
-        </SimpleGrid>
-
         <Tabs variant="enclosed" colorScheme="blue">
           <TabList>
-            <Tab>Available Jobs ({availableJobs.length})</Tab>
-            <Tab>Booked Jobs ({bookedJobs.length})</Tab>
-            <Tab>Completed ({completedJobs.length})</Tab>
+            <Tab>Open Requests ({openRequests.length})</Tab>
+            <Tab>My Bids ({biddedRequests.length})</Tab>
+            <Tab>Booked ({bookedRequests.length})</Tab>
           </TabList>
 
           <TabPanels>
             <TabPanel p={4}>
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-                {availableJobs.map((request) => (
+                {openRequests.map((request) => (
                   <RequestCard key={request.id} request={request} />
                 ))}
               </SimpleGrid>
-              {availableJobs.length === 0 && (
-                <Text textAlign="center">No available jobs at the moment.</Text>
+              {openRequests.length === 0 && (
+                <Text textAlign="center">No open requests available.</Text>
               )}
             </TabPanel>
 
             <TabPanel p={4}>
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-                {bookedJobs.map((request) => (
+                {biddedRequests.map((request) => (
                   <RequestCard key={request.id} request={request} />
                 ))}
               </SimpleGrid>
-              {bookedJobs.length === 0 && (
-                <Text textAlign="center">No booked jobs at the moment.</Text>
+              {biddedRequests.length === 0 && (
+                <Text textAlign="center">You haven't placed any bids yet.</Text>
               )}
             </TabPanel>
 
             <TabPanel p={4}>
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-                {completedJobs.map((request) => (
+                {bookedRequests.map((request) => (
                   <RequestCard key={request.id} request={request} />
                 ))}
               </SimpleGrid>
-              {completedJobs.length === 0 && (
-                <Text textAlign="center">No completed jobs yet.</Text>
+              {bookedRequests.length === 0 && (
+                <Text textAlign="center">No booked requests yet.</Text>
               )}
             </TabPanel>
           </TabPanels>
         </Tabs>
       </VStack>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+      {/* Bid Modal */}
+      <Modal isOpen={isBidModalOpen} onClose={() => setIsBidModalOpen(false)}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Book Job: {selectedRequest?.eventType}</ModalHeader>
+          <ModalHeader>Place a Bid</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Text>Event Details:</Text>
-              <Text><strong>Date:</strong> {selectedRequest && new Date(selectedRequest.date).toLocaleDateString()}</Text>
-              <Text><strong>Location:</strong> {selectedRequest?.location}</Text>
-              <Text><strong>Guest Count:</strong> {selectedRequest?.guestCount}</Text>
-              <Text><strong>Budget:</strong> ${selectedRequest?.budget}</Text>
-              <Text><strong>Description:</strong> {selectedRequest?.description}</Text>
-              
-              <Box p={4} bg="blue.50" borderRadius="md">
-                <Text fontSize="sm">
-                  By booking this job, you agree to provide catering services for this event.
-                  You will be able to contact the customer directly to discuss further details.
-                </Text>
-              </Box>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Bid Amount ($)</FormLabel>
+                <Input
+                  type="number"
+                  value={bidAmount}
+                  onChange={(e) => setBidAmount(e.target.value)}
+                  placeholder="Enter your bid amount"
+                />
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel>Message</FormLabel>
+                <Textarea
+                  value={bidMessage}
+                  onChange={(e) => setBidMessage(e.target.value)}
+                  placeholder="Describe your proposal"
+                />
+              </FormControl>
             </VStack>
           </ModalBody>
-
           <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={handleBookJob}>
-              Book Job
-            </Button>
-            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
+            <Button variant="ghost" mr={3} onClick={() => setIsBidModalOpen(false)}>
               Cancel
             </Button>
+            <Button colorScheme="blue" onClick={handleSubmitBid}>
+              Submit Bid
+            </Button>
           </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Chat Modal */}
+      <Modal isOpen={isChatModalOpen} onClose={() => setIsChatModalOpen(false)} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Chat</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} h="400px">
+              <Box flex={1} w="100%" overflowY="auto" p={4} bg="gray.50" borderRadius="md">
+                {messages.map((message) => (
+                  <Box
+                    key={message.id}
+                    bg={message.senderId === currentUser?.uid ? "blue.100" : "white"}
+                    p={3}
+                    borderRadius="md"
+                    mb={2}
+                    alignSelf={message.senderId === currentUser?.uid ? "flex-end" : "flex-start"}
+                  >
+                    <Text fontSize="xs" color="gray.500">{message.senderEmail}</Text>
+                    <Text>{message.content}</Text>
+                    <Text fontSize="xs" color="gray.500">
+                      {formatDistanceToNow(message.createdAt, { addSuffix: true })}
+                    </Text>
+                  </Box>
+                ))}
+              </Box>
+              <HStack w="100%">
+                <Input
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder="Type your message..."
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSendMessage();
+                    }
+                  }}
+                />
+                <Button colorScheme="blue" onClick={handleSendMessage}>
+                  Send
+                </Button>
+              </HStack>
+            </VStack>
+          </ModalBody>
         </ModalContent>
       </Modal>
     </Container>
