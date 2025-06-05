@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Flex, Button, useColorModeValue } from '@chakra-ui/react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -8,6 +8,7 @@ import { signOut } from 'firebase/auth';
 const Navbar = () => {
   const { currentUser } = useAuth();
   const bg = useColorModeValue('white', 'gray.800');
+  const location = useLocation();
 
   const handleSignOut = async () => {
     try {
@@ -21,6 +22,19 @@ const Navbar = () => {
     if (currentUser?.email === 'natalya@thecitykitch.com') return 'admin';
     return localStorage.getItem('userType') || 'customer';
   };
+
+  // Hide navigation on the home page (sign in/sign up)
+  if (location.pathname === '/') {
+    return (
+      <Box bg={bg} px={4} shadow="md">
+        <Flex h={16} alignItems="center" justifyContent="flex-end">
+          {currentUser && (
+            <Button onClick={handleSignOut}>Sign Out</Button>
+          )}
+        </Flex>
+      </Box>
+    );
+  }
 
   return (
     <Box bg={bg} px={4} shadow="md">
@@ -56,4 +70,4 @@ const Navbar = () => {
   );
 };
 
-export default Navbar
+export default Navbar;
