@@ -16,11 +16,20 @@ import {
   Td,
   Badge,
   useToast,
+  IconButton,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
+  Button,
 } from '@chakra-ui/react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { DeleteIcon } from '@chakra-ui/icons';
 
 interface User {
   id: string;
@@ -46,9 +55,12 @@ const Admin = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<CateringRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const { currentUser } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const cancelRef = React.useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -56,7 +68,10 @@ const Admin = () => {
         navigate('/');
         return;
       }
-      // In a real app, you'd check if the user has admin rights here
+      if (currentUser.email !== 'natalya@thecitykitch.com') {
+        navigate('/');
+        return;
+      }
     };
 
     const fetchData = async () => {
@@ -93,6 +108,36 @@ const Admin = () => {
     fetchData();
   }, [currentUser, navigate, toast]);
 
+  const handleDeleteUser = async (user: User) => {
+    setUserToDelete(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
+
+    try {
+      await deleteDoc(doc(db, 'users', userToDelete.id));
+      setUsers(users.filter(u => u.id !== userToDelete.id));
+      toast({
+        title: 'User deleted',
+        description: 'The user has been successfully deleted.',
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete user. Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setUserToDelete(null);
+    }
+  };
+
   if (loading) {
     return <Box p={8}>Loading...</Box>;
   }
@@ -115,6 +160,7 @@ const Admin = () => {
                   <Th>Email</Th>
                   <Th>User Type</Th>
                   <Th>Created At</Th>
+                  <Th>Actions</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -127,6 +173,15 @@ const Admin = () => {
                       </Badge>
                     </Td>
                     <Td>{new Date(user.createdAt).toLocaleDateString()}</Td>
+                    <Td>
+                      <IconButton
+                        aria-label="Delete user"
+                        icon={<DeleteIcon />}
+                        colorScheme="red"
+                        size="sm"
+                        onClick={() => handleDeleteUser(user)}
+                      />
+                    </Td>
                   </Tr>
                 ))}
               </Tbody>
@@ -163,6 +218,33 @@ const Admin = () => {
           </TabPanel>
         </TabPanels>
       </Tabs>
+
+      <AlertDialog
+        isOpen={isDeleteDialogOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setIsDeleteDialogOpen(false)}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete User
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete {userToDelete?.email}? This action cannot be undone.
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button colorScheme="red" onClick={confirmDelete} ml={3}>
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Container>
   );
 };
