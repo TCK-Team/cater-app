@@ -64,7 +64,7 @@ const ViewRequests = () => {
 
   if (loading) {
     return (
-      <Container maxW="container.xl" py={8}>
+      <Container maxW="container.xl\" py={8}>
         <Text>Loading requests...</Text>
       </Container>
     );
