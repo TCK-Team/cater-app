@@ -35,14 +35,8 @@ import {
   ModalFooter,
   ModalBody,
   ModalCloseButton,
-  FormControl,
-  FormLabel,
-  Input,
-  Textarea,
-  NumberInput,
-  NumberInputField,
 } from '@chakra-ui/react';
-import { collection, query, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
+import { collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -71,24 +65,11 @@ interface CateringRequest {
   createdAt: string;
 }
 
-interface Bid {
-  amount: number;
-  message: string;
-  proposedMenu: string;
-  estimatedDuration: string;
-}
-
 const CatererView = () => {
   const [requests, setRequests] = useState<CateringRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<CateringRequest | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [bidData, setBidData] = useState<Bid>({
-    amount: 0,
-    message: '',
-    proposedMenu: '',
-    estimatedDuration: '',
-  });
   
   const { currentUser } = useAuth();
   const toast = useToast();
@@ -128,49 +109,36 @@ const CatererView = () => {
     fetchRequests();
   }, [currentUser, navigate, toast]);
 
-  const handleBidSubmit = async () => {
+  const handleBookJob = async () => {
     if (!selectedRequest || !currentUser) return;
 
     try {
-      // Create a new bid document
-      await addDoc(collection(db, 'bids'), {
-        requestId: selectedRequest.id,
-        catererId: currentUser.uid,
-        catererEmail: currentUser.email,
-        ...bidData,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      });
-
-      // Update the request status
       const requestRef = doc(db, 'requests', selectedRequest.id);
       await updateDoc(requestRef, {
-        status: 'pending',
+        status: 'booked',
+        catererId: currentUser.uid,
+        catererEmail: currentUser.email,
+        bookedAt: new Date().toISOString(),
       });
 
       toast({
-        title: 'Bid submitted successfully',
+        title: 'Job booked successfully',
+        description: 'You can now contact the customer to discuss details.',
         status: 'success',
         duration: 3000,
       });
 
       setIsModalOpen(false);
-      setBidData({
-        amount: 0,
-        message: '',
-        proposedMenu: '',
-        estimatedDuration: '',
-      });
 
-      // Refresh the requests list
+      // Update the local state
       const updatedRequests = requests.map(req =>
-        req.id === selectedRequest.id ? { ...req, status: 'pending' } : req
+        req.id === selectedRequest.id ? { ...req, status: 'booked' } : req
       );
       setRequests(updatedRequests);
     } catch (error) {
       toast({
-        title: 'Error submitting bid',
-        description: 'There was an error submitting your bid. Please try again.',
+        title: 'Error booking job',
+        description: 'There was an error booking this job. Please try again.',
         status: 'error',
         duration: 5000,
       });
@@ -181,10 +149,10 @@ const CatererView = () => {
     switch (status) {
       case 'open':
         return 'green';
-      case 'pending':
-        return 'yellow';
-      case 'completed':
+      case 'booked':
         return 'blue';
+      case 'completed':
+        return 'purple';
       default:
         return 'gray';
     }
@@ -202,7 +170,7 @@ const CatererView = () => {
           </HStack>
 
           <Progress
-            value={request.status === 'completed' ? 100 : request.status === 'pending' ? 50 : 25}
+            value={request.status === 'completed' ? 100 : request.status === 'booked' ? 50 : 25}
             size="sm"
             colorScheme={getStatusColor(request.status)}
             borderRadius="full"
@@ -220,13 +188,13 @@ const CatererView = () => {
             </HStack>
 
             <HStack>
-              <Icon as={EmailIcon} color="blue.500" />
-              <Text>{request.userEmail}</Text>
+              <Icon as={PhoneIcon} color="blue.500" />
+              <Text>Location: {request.location}</Text>
             </HStack>
 
             <HStack>
-              <Icon as={PhoneIcon} color="blue.500" />
-              <Text>Location: {request.location}</Text>
+              <Icon as={EmailIcon} color="blue.500" />
+              <Text>{request.userEmail}</Text>
             </HStack>
 
             <Text noOfLines={2} color="gray.600">
@@ -251,7 +219,7 @@ const CatererView = () => {
                   setIsModalOpen(true);
                 }}
               >
-                Submit Bid
+                Book Job
               </Button>
             )}
           </HStack>
@@ -268,9 +236,9 @@ const CatererView = () => {
     );
   }
 
-  const newRequests = requests.filter(r => r.status === 'open');
-  const activeRequests = requests.filter(r => r.status === 'pending');
-  const completedRequests = requests.filter(r => r.status === 'completed');
+  const availableJobs = requests.filter(r => r.status === 'open');
+  const bookedJobs = requests.filter(r => r.status === 'booked');
+  const completedJobs = requests.filter(r => r.status === 'completed');
 
   const responseRate = 95;
   const completionRate = 98;
@@ -337,7 +305,7 @@ const CatererView = () => {
             <CardBody>
               <Stat>
                 <StatLabel>Active Jobs</StatLabel>
-                <StatNumber>{activeRequests.length}</StatNumber>
+                <StatNumber>{bookedJobs.length}</StatNumber>
                 <StatHelpText>
                   Current Projects
                 </StatHelpText>
@@ -349,7 +317,7 @@ const CatererView = () => {
             <CardBody>
               <Stat>
                 <StatLabel>Total Completed</StatLabel>
-                <StatNumber>{completedRequests.length}</StatNumber>
+                <StatNumber>{completedJobs.length}</StatNumber>
                 <StatHelpText>
                   Lifetime Jobs
                 </StatHelpText>
@@ -360,41 +328,41 @@ const CatererView = () => {
 
         <Tabs variant="enclosed" colorScheme="blue">
           <TabList>
-            <Tab>New Leads ({newRequests.length})</Tab>
-            <Tab>Active Jobs ({activeRequests.length})</Tab>
-            <Tab>Completed ({completedRequests.length})</Tab>
+            <Tab>Available Jobs ({availableJobs.length})</Tab>
+            <Tab>Booked Jobs ({bookedJobs.length})</Tab>
+            <Tab>Completed ({completedJobs.length})</Tab>
           </TabList>
 
           <TabPanels>
             <TabPanel p={4}>
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-                {newRequests.map((request) => (
+                {availableJobs.map((request) => (
                   <RequestCard key={request.id} request={request} />
                 ))}
               </SimpleGrid>
-              {newRequests.length === 0 && (
-                <Text textAlign="center">No new leads available at the moment.</Text>
+              {availableJobs.length === 0 && (
+                <Text textAlign="center">No available jobs at the moment.</Text>
               )}
             </TabPanel>
 
             <TabPanel p={4}>
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-                {activeRequests.map((request) => (
+                {bookedJobs.map((request) => (
                   <RequestCard key={request.id} request={request} />
                 ))}
               </SimpleGrid>
-              {activeRequests.length === 0 && (
-                <Text textAlign="center">No active jobs at the moment.</Text>
+              {bookedJobs.length === 0 && (
+                <Text textAlign="center">No booked jobs at the moment.</Text>
               )}
             </TabPanel>
 
             <TabPanel p={4}>
               <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-                {completedRequests.map((request) => (
+                {completedJobs.map((request) => (
                   <RequestCard key={request.id} request={request} />
                 ))}
               </SimpleGrid>
-              {completedRequests.length === 0 && (
+              {completedJobs.length === 0 && (
                 <Text textAlign="center">No completed jobs yet.</Text>
               )}
             </TabPanel>
@@ -402,55 +370,32 @@ const CatererView = () => {
         </Tabs>
       </VStack>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} size="xl">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Submit Bid for {selectedRequest?.eventType}</ModalHeader>
+          <ModalHeader>Book Job: {selectedRequest?.eventType}</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <VStack spacing={4}>
-              <FormControl isRequired>
-                <FormLabel>Bid Amount ($)</FormLabel>
-                <NumberInput min={0}>
-                  <NumberInputField
-                    value={bidData.amount}
-                    onChange={(e) => setBidData({ ...bidData, amount: Number(e.target.value) })}
-                  />
-                </NumberInput>
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel>Proposed Menu</FormLabel>
-                <Textarea
-                  value={bidData.proposedMenu}
-                  onChange={(e) => setBidData({ ...bidData, proposedMenu: e.target.value })}
-                  placeholder="Describe your proposed menu..."
-                />
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel>Estimated Duration</FormLabel>
-                <Input
-                  value={bidData.estimatedDuration}
-                  onChange={(e) => setBidData({ ...bidData, estimatedDuration: e.target.value })}
-                  placeholder="e.g., 4 hours"
-                />
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel>Message to Customer</FormLabel>
-                <Textarea
-                  value={bidData.message}
-                  onChange={(e) => setBidData({ ...bidData, message: e.target.value })}
-                  placeholder="Include any additional information or special offers..."
-                />
-              </FormControl>
+            <VStack spacing={4} align="stretch">
+              <Text>Event Details:</Text>
+              <Text><strong>Date:</strong> {selectedRequest && new Date(selectedRequest.date).toLocaleDateString()}</Text>
+              <Text><strong>Location:</strong> {selectedRequest?.location}</Text>
+              <Text><strong>Guest Count:</strong> {selectedRequest?.guestCount}</Text>
+              <Text><strong>Budget:</strong> ${selectedRequest?.budget}</Text>
+              <Text><strong>Description:</strong> {selectedRequest?.description}</Text>
+              
+              <Box p={4} bg="blue.50" borderRadius="md">
+                <Text fontSize="sm">
+                  By booking this job, you agree to provide catering services for this event.
+                  You will be able to contact the customer directly to discuss further details.
+                </Text>
+              </Box>
             </VStack>
           </ModalBody>
 
           <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={handleBidSubmit}>
-              Submit Bid
+            <Button colorScheme="blue" mr={3} onClick={handleBookJob}>
+              Book Job
             </Button>
             <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
               Cancel
