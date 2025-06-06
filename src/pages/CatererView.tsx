@@ -382,7 +382,7 @@ const CatererView = () => {
     return (
       <Card>
         <CardBody>
-          <VStack align="stretch" spacing={4}>
+          <VStack align="stretch\" spacing={4}>
             <HStack justify="space-between">
               <Heading size="md">{request.eventType}</Heading>
               <Badge colorScheme={getStatusColor(request.status)}>
@@ -630,7 +630,7 @@ const CatererView = () => {
           <ModalHeader>
             Chat with Customer
             {selectedRequest && (
-              <Text fontSize="sm" fontWeight="normal" color="gray.600">
+              <Text fontSize="sm\" fontWeight="normal\" color="gray.600">
                 {selectedRequest.eventType} • {selectedRequest.userEmail}
               </Text>
             )}
@@ -640,7 +640,7 @@ const CatererView = () => {
             <VStack spacing={4} h="400px">
               <Box flex={1} w="100%" overflowY="auto" p={4} bg="gray.50" borderRadius="md" position="relative">
                 {loadingMessages ? (
-                  <Flex justify="center" align="center" h="100%">
+                  <Flex justify="center\" align="center\" h="100%">
                     <Spinner />
                   </Flex>
                 ) : messages.length === 0 ? (
