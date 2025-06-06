@@ -45,8 +45,9 @@ import {
   AlertIcon,
   AlertTitle,
   AlertDescription,
+  Spinner,
 } from '@chakra-ui/react';
-import { collection, query, getDocs, addDoc, serverTimestamp, where, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, serverTimestamp, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -110,6 +111,8 @@ const CatererView = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [bids, setBids] = useState<Bid[]>([]);
   const [submittingBid, setSubmittingBid] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   
   const { currentUser } = useAuth();
   const toast = useToast();
@@ -146,6 +149,7 @@ const CatererView = () => {
         setBids(fetchedBids);
 
       } catch (error) {
+        console.error('Error fetching data:', error);
         toast({
           title: 'Error fetching data',
           description: 'There was an error loading the requests.',
@@ -220,6 +224,7 @@ const CatererView = () => {
         createdAt: new Date()
       } as Bid]);
     } catch (error) {
+      console.error('Error submitting bid:', error);
       toast({
         title: 'Error submitting bid',
         description: 'There was an error submitting your bid. Please try again.',
@@ -234,23 +239,21 @@ const CatererView = () => {
   const handleSendMessage = async () => {
     if (!selectedRequest || !currentUser || !chatMessage.trim()) return;
 
+    setSendingMessage(true);
+
     try {
       const newMessage = {
         requestId: selectedRequest.id,
         senderId: currentUser.uid,
-        senderEmail: currentUser.email,
-        content: chatMessage,
+        senderEmail: currentUser.email || 'Unknown',
+        content: chatMessage.trim(),
         createdAt: serverTimestamp(),
       };
 
+      console.log('Sending message:', newMessage);
       const docRef = await addDoc(collection(db, 'messages'), newMessage);
+      console.log('Message sent with ID:', docRef.id);
 
-      // Update local state
-      setMessages([...messages, { 
-        ...newMessage, 
-        id: docRef.id,
-        createdAt: new Date()
-      } as Message]);
       setChatMessage('');
 
       toast({
@@ -258,18 +261,26 @@ const CatererView = () => {
         status: 'success',
         duration: 2000,
       });
+
+      // Refresh messages
+      await fetchMessages(selectedRequest.id);
     } catch (error) {
+      console.error('Error sending message:', error);
       toast({
         title: 'Error sending message',
         description: 'Failed to send message. Please try again.',
         status: 'error',
         duration: 3000,
       });
+    } finally {
+      setSendingMessage(false);
     }
   };
 
   const fetchMessages = async (requestId: string) => {
+    setLoadingMessages(true);
     try {
+      console.log('Fetching messages for request:', requestId);
       const messagesRef = collection(db, 'messages');
       const q = query(
         messagesRef, 
@@ -278,22 +289,64 @@ const CatererView = () => {
       );
       const querySnapshot = await getDocs(q);
       
-      const fetchedMessages = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date()
-      })) as Message[];
+      console.log('Found messages:', querySnapshot.docs.length);
+      
+      const fetchedMessages = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('Message data:', data);
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date()
+        };
+      }) as Message[];
 
+      console.log('Processed messages:', fetchedMessages);
       setMessages(fetchedMessages);
     } catch (error) {
+      console.error('Error fetching messages:', error);
       toast({
         title: 'Error fetching messages',
         description: 'Failed to load chat messages.',
         status: 'error',
         duration: 3000,
       });
+    } finally {
+      setLoadingMessages(false);
     }
   };
+
+  // Set up real-time listener for messages when chat modal is open
+  useEffect(() => {
+    if (!isChatModalOpen || !selectedRequest) return;
+
+    console.log('Setting up real-time listener for request:', selectedRequest.id);
+    
+    const messagesRef = collection(db, 'messages');
+    const q = query(
+      messagesRef,
+      where('requestId', '==', selectedRequest.id),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log('Real-time update - messages changed:', snapshot.docs.length);
+      const fetchedMessages = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date()
+        };
+      }) as Message[];
+      
+      setMessages(fetchedMessages);
+    }, (error) => {
+      console.error('Error in real-time listener:', error);
+    });
+
+    return () => unsubscribe();
+  }, [isChatModalOpen, selectedRequest]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -329,7 +382,7 @@ const CatererView = () => {
     return (
       <Card>
         <CardBody>
-          <VStack align="stretch\" spacing={4}>
+          <VStack align="stretch" spacing={4}>
             <HStack justify="space-between">
               <Heading size="md">{request.eventType}</Heading>
               <Badge colorScheme={getStatusColor(request.status)}>
@@ -377,8 +430,8 @@ const CatererView = () => {
                   colorScheme="blue"
                   variant="outline"
                   onClick={() => {
+                    console.log('Opening chat for request:', request.id);
                     setSelectedRequest(request);
-                    fetchMessages(request.id);
                     setIsChatModalOpen(true);
                   }}
                 >
@@ -496,7 +549,7 @@ const CatererView = () => {
                   <AlertDescription>
                     Start bidding on available requests to grow your business.
                   </AlertDescription>
-                </Alert>
+                  </Alert>
               ) : (
                 <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
                   {biddedRequests.map((request) => (
@@ -577,7 +630,7 @@ const CatererView = () => {
           <ModalHeader>
             Chat with Customer
             {selectedRequest && (
-              <Text fontSize="sm\" fontWeight="normal\" color="gray.600">
+              <Text fontSize="sm" fontWeight="normal" color="gray.600">
                 {selectedRequest.eventType} • {selectedRequest.userEmail}
               </Text>
             )}
@@ -585,11 +638,20 @@ const CatererView = () => {
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4} h="400px">
-              <Box flex={1} w="100%" overflowY="auto" p={4} bg="gray.50" borderRadius="md">
-                {messages.length === 0 ? (
-                  <Text color="gray.500\" textAlign="center">
-                    No messages yet. Start the conversation!
-                  </Text>
+              <Box flex={1} w="100%" overflowY="auto" p={4} bg="gray.50" borderRadius="md" position="relative">
+                {loadingMessages ? (
+                  <Flex justify="center" align="center" h="100%">
+                    <Spinner />
+                  </Flex>
+                ) : messages.length === 0 ? (
+                  <Flex justify="center" align="center" h="100%" direction="column">
+                    <Text color="gray.500" textAlign="center" mb={2}>
+                      No messages yet. Start the conversation!
+                    </Text>
+                    <Text fontSize="sm" color="gray.400" textAlign="center">
+                      Introduce yourself and discuss the catering details.
+                    </Text>
+                  </Flex>
                 ) : (
                   messages.map((message) => (
                     <Box
@@ -601,6 +663,7 @@ const CatererView = () => {
                       ml={message.senderId === currentUser?.uid ? "auto" : "0"}
                       mr={message.senderId === currentUser?.uid ? "0" : "auto"}
                       maxW="80%"
+                      boxShadow="sm"
                     >
                       <Text fontSize="xs" color="gray.500" mb={1}>
                         {message.senderId === currentUser?.uid ? 'You' : message.senderEmail}
@@ -619,12 +682,19 @@ const CatererView = () => {
                   onChange={(e) => setChatMessage(e.target.value)}
                   placeholder="Type your message..."
                   onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
                       handleSendMessage();
                     }
                   }}
+                  disabled={sendingMessage}
                 />
-                <Button colorScheme="blue" onClick={handleSendMessage}>
+                <Button 
+                  colorScheme="blue" 
+                  onClick={handleSendMessage}
+                  isLoading={sendingMessage}
+                  disabled={!chatMessage.trim()}
+                >
                   Send
                 </Button>
               </HStack>
